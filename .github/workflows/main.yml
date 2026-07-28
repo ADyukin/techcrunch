@@ -3,8 +3,7 @@ name: TechCrunch Apps Digest
 on:
   workflow_dispatch:
   schedule:
-    - cron: "0 19 * * *"
-      timezone: "Europe/Moscow"
+    - cron: "0 16 * * *"
 
 permissions:
   contents: write
@@ -23,11 +22,13 @@ jobs:
           python-version: "3.11"
 
       - name: Ensure state file exists
+        working-directory: telegram-summary-techcrunch-apps-techcrunch-summary
         run: |
           mkdir -p work
           test -f work/state.json || printf '%s\n' '{"sent_urls":[],"last_digest_date":null}' > work/state.json
 
       - name: Run digest bot
+        working-directory: telegram-summary-techcrunch-apps-techcrunch-summary
         env:
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
@@ -36,6 +37,7 @@ jobs:
         run: python3 bot.py --run-once
 
       - name: Commit updated state
+        working-directory: telegram-summary-techcrunch-apps-techcrunch-summary
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
