@@ -542,6 +542,8 @@ def collect_new_articles(state: dict[str, Any]) -> list[Article]:
     sent_urls = set(state.get("sent_urls", []))
     articles: list[Article] = []
     max_articles = int(os.environ.get("MAX_ARTICLES_PER_RUN", "30"))
+    now_msk = datetime.now(MSK)
+
     for preview in get_category_previews():
         if preview.url in sent_urls:
             continue
@@ -553,11 +555,16 @@ def collect_new_articles(state: dict[str, Any]) -> list[Article]:
         except Exception as error:  # noqa: BLE001
             print(f"Ошибка обработки статьи {preview.url}: {error}", file=sys.stderr)
             continue
+
         if "Apps" not in article.topics:
             continue
+        if not published_today_msk(article.published_at, now_msk):
+            continue
+
         articles.append(article)
         if len(articles) >= max_articles:
             break
+
     return articles
 
 
@@ -582,7 +589,22 @@ def run_digest() -> int:
     save_state(state)
     print(f"Отправлено статей: {len(articles)}")
     return 0
+    
+def published_today_msk(published_at: str, now_msk: datetime) -> bool:
+    published_at = clean_text(published_at)
+    if not published_at:
+        return False
 
+    try:
+        normalized = published_at.replace("Z", "+00:00")
+        published_dt = datetime.fromisoformat(normalized)
+    except ValueError:
+        return False
+
+    if published_dt.tzinfo is None:
+        published_dt = published_dt.replace(tzinfo=timezone.utc)
+
+    return published_dt.astimezone(MSK).date() == now_msk.date()
 
 def should_run_now(state: dict[str, Any], now_msk: datetime) -> bool:
     last_digest_date = state.get("last_digest_date")
