@@ -541,7 +541,7 @@ def send_digest(articles: list[Article]) -> None:
 def collect_new_articles(state: dict[str, Any]) -> list[Article]:
     sent_urls = set(state.get("sent_urls", []))
     articles: list[Article] = []
-    max_articles = int(os.environ.get("MAX_ARTICLES_PER_RUN", "3"))
+    max_articles = int(os.environ.get("MAX_ARTICLES_PER_RUN", "30"))
     for preview in get_category_previews():
         if preview.url in sent_urls:
             continue
