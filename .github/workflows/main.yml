@@ -1,0 +1,45 @@
+name: TechCrunch Apps Digest
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "0 19 * * *"
+      timezone: "Europe/Moscow"
+
+permissions:
+  contents: write
+
+jobs:
+  digest:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Ensure state file exists
+        run: |
+          mkdir -p work
+          test -f work/state.json || printf '%s\n' '{"sent_urls":[],"last_digest_date":null}' > work/state.json
+
+      - name: Run digest bot
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          MAX_ARTICLES_PER_RUN: "3"
+          SSL_CERT_FILE: /etc/ssl/certs/ca-certificates.crt
+        run: python3 bot.py --run-once
+
+      - name: Commit updated state
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add work/state.json
+          git diff --cached --quiet && exit 0
+          git commit -m "Update digest state"
+          git push
