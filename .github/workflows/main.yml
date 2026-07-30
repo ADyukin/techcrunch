@@ -3,7 +3,8 @@ name: TechCrunch Apps Digest
 on:
   workflow_dispatch:
   schedule:
-    - cron: "0 16 * * *"
+    - cron: "35 20 * * *"
+      timezone: "Europe/Moscow"
     
 permissions:
   contents: write
