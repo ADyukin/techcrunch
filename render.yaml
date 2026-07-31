@@ -1,0 +1,21 @@
+services:
+  - type: cron
+    name: techcrunch-apps-digest
+    runtime: python
+    plan: starter
+    schedule: "0 19 * * *"
+    buildCommand: python -m py_compile bot.py
+    startCommand: python bot.py --run-once
+    envVars:
+      - key: TELEGRAM_BOT_TOKEN
+        sync: false
+      - key: TELEGRAM_CHAT_ID
+        sync: false
+      - key: MAX_ARTICLES_PER_RUN
+        value: "3"
+      - key: DIGEST_HOUR_MSK
+        value: "22"
+      - key: USE_PUBLICATION_WINDOW
+        value: "1"
+      - key: SSL_CERT_FILE
+        value: /etc/ssl/certs/ca-certificates.crt

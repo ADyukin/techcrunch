@@ -10,7 +10,7 @@ import urllib.error
 import urllib.parse
 import urllib.request
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from html import unescape
 from html.parser import HTMLParser
 from pathlib import Path
@@ -170,6 +170,46 @@ def save_state(state: dict[str, Any]) -> None:
     STATE_PATH.parent.mkdir(parents=True, exist_ok=True)
     with STATE_PATH.open("w", encoding="utf-8") as file:
         json.dump(state, file, ensure_ascii=False, indent=2)
+
+
+def use_publication_window() -> bool:
+    return os.environ.get("USE_PUBLICATION_WINDOW", "0") == "1"
+
+
+def get_digest_hour_msk() -> int:
+    return int(os.environ.get("DIGEST_HOUR_MSK", "22"))
+
+
+def get_publication_window(now_msk: datetime | None = None) -> tuple[datetime, datetime]:
+    now_msk = now_msk or datetime.now(MSK)
+    digest_hour = get_digest_hour_msk()
+    window_end = now_msk.replace(hour=digest_hour, minute=0, second=0, microsecond=0)
+    if now_msk < window_end:
+        window_end = now_msk
+    window_start = window_end - timedelta(days=1)
+    return window_start, window_end
+
+
+def parse_published_at(value: str) -> datetime | None:
+    value = clean_text(value)
+    if not value:
+        return None
+    normalized = value.replace("Z", "+00:00")
+    try:
+        parsed = datetime.fromisoformat(normalized)
+    except ValueError:
+        return None
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=timezone.utc)
+    return parsed.astimezone(MSK)
+
+
+def is_article_in_window(article: Article, now_msk: datetime | None = None) -> bool:
+    published_at = parse_published_at(article.published_at)
+    if not published_at:
+        return False
+    window_start, window_end = get_publication_window(now_msk)
+    return window_start <= published_at <= window_end
 
 
 def get_category_previews() -> list[ArticlePreview]:
@@ -542,8 +582,10 @@ def collect_new_articles(state: dict[str, Any]) -> list[Article]:
     sent_urls = set(state.get("sent_urls", []))
     articles: list[Article] = []
     max_articles = int(os.environ.get("MAX_ARTICLES_PER_RUN", "3"))
+    publication_window_mode = use_publication_window()
+    now_msk = datetime.now(MSK)
     for preview in get_category_previews():
-        if preview.url in sent_urls:
+        if not publication_window_mode and preview.url in sent_urls:
             continue
         try:
             article = get_article_details(preview)
@@ -554,6 +596,8 @@ def collect_new_articles(state: dict[str, Any]) -> list[Article]:
             print(f"Ошибка обработки статьи {preview.url}: {error}", file=sys.stderr)
             continue
         if "Apps" not in article.topics:
+            continue
+        if publication_window_mode and not is_article_in_window(article, now_msk):
             continue
         articles.append(article)
         if len(articles) >= max_articles:
@@ -574,12 +618,13 @@ def run_digest() -> int:
         return 0
 
     send_digest(articles)
-    sent_urls = set(state.get("sent_urls", []))
-    for article in articles:
-        sent_urls.add(article.url)
-    state["sent_urls"] = sorted(sent_urls)
-    state["last_digest_date"] = datetime.now(MSK).date().isoformat()
-    save_state(state)
+    if not use_publication_window():
+        sent_urls = set(state.get("sent_urls", []))
+        for article in articles:
+            sent_urls.add(article.url)
+        state["sent_urls"] = sorted(sent_urls)
+        state["last_digest_date"] = datetime.now(MSK).date().isoformat()
+        save_state(state)
     print(f"Отправлено статей: {len(articles)}")
     return 0
 
